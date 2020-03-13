@@ -2,6 +2,8 @@ package jrtr;
 
 import java.lang.reflect.Array;
 
+import jrtr.VertexData.Semantic;
+
 public class Sphere {
 
 	public float[] vertices;
@@ -10,6 +12,24 @@ public class Sphere {
 	public float[] normals;
 	public float[] texcoords;
 	public int n;
+	
+	private VertexData data;
+	
+	public final void createVertexData(RenderContext rend) 
+	{
+		data = rend.makeVertexData(vertices.length/3);
+		data.addElement(vertices, Semantic.POSITION, 3);
+		data.addElement(normals, Semantic.NORMAL, 3);
+		data.addElement(colors, Semantic.COLOR, 3);
+		data.addElement(texcoords, Semantic.TEXCOORD, 2);
+		
+		data.addIndices(indices);
+	}
+	
+	public final VertexData getVertexData() 
+	{
+		return data;
+	}
 	
 	public Sphere(int s, float rad, float[] color1, float[] color2)
 	{

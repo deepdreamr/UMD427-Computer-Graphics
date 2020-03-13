@@ -89,13 +89,17 @@ public class GLRenderContext implements RenderContext {
 
 		// Traverse scene manager and draw everything
 		SceneManagerIterator iterator = sceneManager.iterator();
+		long start = System.nanoTime();
 		while (iterator.hasNext()) {
 			RenderItem r = iterator.next();
 			if (r.getShape() != null) {
 				draw(r);
 			}
 		}
-
+		long est = System.nanoTime() - start;
+		// uncomment to get time
+		// System.out.println(est);
+		
 		// Do some processing at the end of the frame
 		endFrame();
 	}
@@ -275,7 +279,14 @@ public class GLRenderContext implements RenderContext {
 				.getFrustum().getProjectionMatrix()), 0);
 
 	}
-
+	
+	private static float[] toArray(ArrayList<Float> list) 
+	{
+		float[] arr=new float[list.size()]; 
+		for(int i=0;i<list.size();i++)arr[i]=list.get(i);
+		return arr;
+	}
+	
 	/**
 	 * Set up a material for rendering. Activate its shader, and pass the 
 	 * material properties, textures, and light sources to the shader.
@@ -308,34 +319,76 @@ public class GLRenderContext implements RenderContext {
 			}
 			
 			// Pass a default light source to shader
-			String lightString = "lightDirection[" + 0 + "]";			
-			id = gl.glGetUniformLocation(activeShaderID, lightString);
-			if(id!=-1)
-				gl.glUniform4f(id, 0, 0, 1, 0.f);		// Set light direction
-			else
-				System.out.print("Could not get location of uniform variable " + lightString + "\n");
+			String lightString = "lightPositions";
+			
+			// Set point light direction, last attribute is point.
+			
 			int nLights = 1;
 			
 			// Iterate over all light sources in scene manager (overwriting the default light source)
-			Iterator<Light> iter = sceneManager.lightIterator();			
+			Iterator<Light> iter = sceneManager.lightIterator();
 			
 			Light l;
 			if(iter != null) {
 				nLights = 0;
+				ArrayList<Float> lightList = new ArrayList<Float>();
+				ArrayList<Float> diffuse = new ArrayList<Float>();
+				ArrayList<Float> specular = new ArrayList<Float>();
+				ArrayList<Float> ambient = new ArrayList<Float>();
 				while(iter.hasNext() && nLights<8)
 				{
 					l = iter.next(); 
+					lightList.add(l.position.x);
+					lightList.add(l.position.y);
+					lightList.add(l.position.z);
+					lightList.add(1.f);
 					
+					diffuse.add(l.diffuse.x);
+					diffuse.add(l.diffuse.y);
+					diffuse.add(l.diffuse.z);
+					
+					specular.add(l.specular.x);
+					specular.add(l.specular.y);
+					specular.add(l.specular.z);
+					
+					ambient.add(l.ambient.x);
+					ambient.add(l.ambient.y);
+					ambient.add(l.ambient.z);
 					// Pass light direction to shader, we assume the shader stores it in an array "lightDirection[]"
-					lightString = "lightDirection[" + nLights + "]";			
-					id = gl.glGetUniformLocation(activeShaderID, lightString);
-					if(id!=-1)
-						gl.glUniform4f(id, l.direction.x, l.direction.y, l.direction.z, 0.f);		// Set light direction
-					else
-						System.out.print("Could not get location of uniform variable " + lightString + "\n");
-					
+					/*
+					 * if(id!=-1) gl.glUniform4f(id, l.direction.x, l.direction.y, l.direction.z,
+					 * 0.f); // Set light direction else
+					 * System.out.print("Could not get location of uniform variable " + lightString
+					 * + "\n");
+					 */		
 					nLights++;
 				}
+				
+				
+				lightString = "lightPositions";
+				float[] lights = toArray(lightList);
+				id = gl.glGetUniformLocation(activeShaderID, lightString);
+				if(id!=-1 && !lightList.isEmpty())
+					gl.glUniform4fv(id, nLights, lights, 0);
+
+				lightString = "cli";
+				float[] dif = toArray(diffuse);
+				id = gl.glGetUniformLocation(activeShaderID, lightString);
+				if(id!=-1 && !diffuse.isEmpty())
+					gl.glUniform3fv(id, nLights, dif, 0);
+				
+				lightString = "spec";
+				float[] spec = toArray(specular);
+				id = gl.glGetUniformLocation(activeShaderID, lightString);
+				if(id!=-1 && !specular.isEmpty())
+					gl.glUniform3fv(id, nLights, spec, 0);
+				
+				lightString = "amb";
+				float[] amb = toArray(ambient);
+				id = gl.glGetUniformLocation(activeShaderID, lightString);
+				if(id!=-1 && !ambient.isEmpty())
+					gl.glUniform3fv(id, nLights, amb, 0);
+				
 				
 				// Pass number of lights to shader, we assume this is in a variable "nLights" in the shader
 				id = gl.glGetUniformLocation(activeShaderID, "nLights");

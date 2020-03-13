@@ -27,6 +27,7 @@ public class SWRenderContext implements RenderContext {
 
 	private SceneManagerInterface sceneManager;
 	private BufferedImage colorBuffer;
+	private double[][] zBuffer;
 	private int[] zeroColorBuffer;
 	private int width, height;
 	
@@ -42,6 +43,7 @@ public class SWRenderContext implements RenderContext {
 		// Initialize rendering pipeline state variables to default values
 		projectionMatrix = new Matrix4f();
 		viewportMatrix = new Matrix4f();
+		zBuffer = new double[width][height];
 		vertexColor = new float[3];
 		vertexColor[0] = 1.f;
 		vertexColor[1] = 1.f;
@@ -118,6 +120,8 @@ public class SWRenderContext implements RenderContext {
 		
 		// Clear framebuffer
 		colorBuffer.setRGB(0, 0, width, height, zeroColorBuffer, 0, width);
+		// Clear zBuffer
+		zBuffer = new double[width][height];
 	}
 	
 	private void endFrame()
@@ -144,7 +148,7 @@ public class SWRenderContext implements RenderContext {
 		float[][] texCoords = new float[3][2];
 
 		// Construct full transformation matrix
-		Matrix4f t= new Matrix4f(viewportMatrix);
+		Matrix4f t = new Matrix4f(viewportMatrix);
 		t.mul(projectionMatrix);
 		t.mul(sceneManager.getCamera().getCameraMatrix());
 		t.mul(renderItem.getT());
@@ -211,6 +215,47 @@ public class SWRenderContext implements RenderContext {
 		}
 	}
 	
+	private void rasterize(int xStart, int yStart, int xEnd, int yEnd, Matrix3d coef, Matrix3d coef2, float[][] colors) 
+	{
+		Vector3d iden = new Vector3d(1, 1, 1);
+		
+		for(int j = yStart; j < yEnd; j++) 
+		{
+			for(int i = xStart; i < xEnd; i++) 
+			{
+				// (x/w, y/w, 1) -> (x, y, w)
+				Vector3d temp = new Vector3d(i+.5d, j+.5d, 1);
+				Vector3d res = new Vector3d();
+				
+				coef.transform(temp, res);
+				// alpha, beta, gamma > 0 point is in our triangle
+				if(res.x > 0 && res.y > 0 && res.z > 0) {
+					// handle z buffer
+					Vector3d res2 = new Vector3d();
+					coef2.transform(iden, res2);
+					double over_w = temp.dot(res2);
+					if(over_w > zBuffer[i][j])
+					{
+						Vector3d red = new Vector3d(colors[0][0], colors[1][0], colors[2][0]);
+						Vector3d green = new Vector3d(colors[0][1], colors[1][1], colors[2][1]);
+						Vector3d blue = new Vector3d(colors[0][2], colors[1][2], colors[2][2]);
+						
+						coef2.transform(red);
+						coef2.transform(green);
+						coef2.transform(blue);
+						double rd = red.dot(temp) / over_w;
+						double gd = green.dot(temp) / over_w;
+						double bd = blue.dot(temp) / over_w;
+						
+						colorBuffer.setRGB(i, j, ((int)(255.f*rd) << 16) | ((int)(255.f*gd) << 8) | ((int)(255.f*bd)));
+
+						zBuffer[i][j] = over_w;
+					}
+				}
+			}
+		}
+	}
+	
 	/**
 	 * Draw a triangle. Implement triangle rasterization here. You will need to include a z-buffer to 
 	 * resolve visibility.  
@@ -219,23 +264,59 @@ public class SWRenderContext implements RenderContext {
 	{							
 		// Project vertices and draw. This is only for demonstration purposes and needs to be replace
 		// by your triangle rasterization code.
-		for(int i=0; i<3; i++)	
+		Matrix3d coef = new Matrix3d();
+		for(int i = 0; i < 3; i++) {
+			// Set row of matrix to x, y, w for entire matrix
+			coef.setRow(i, positions[i][0], positions[i][1], positions[i][3]);
+			// NaN check
+			if(positions[i][0] != positions[i][0] || positions[i][1] != positions[i][1] 
+					|| positions[i][3]  != positions[i][3] ) {
+				return;
+			}
+		}
+		coef.invert();
+		Matrix3d coef2 = new Matrix3d(coef);
+		coef.transpose();
+		Vector3d trans1 = new Vector3d(positions[0][0], positions[0][1], positions[0][3]);
+		Vector3d trans2 = new Vector3d(positions[1][0], positions[1][1], positions[1][3]);
+		Vector3d trans3 = new Vector3d(positions[2][0], positions[2][1], positions[2][3]);
+		
+		Vector3d[] result = {new Vector3d(), new Vector3d(), new Vector3d()};
+		
+		coef.transform(trans1, result[0]);
+		coef.transform(trans2, result[1]);
+		coef.transform(trans3, result[2]);
+		
+		// All W values are positive
+		if(trans1.z > 0 && trans2.z > 0 && trans3.z > 0)
 		{
-			if(positions[i][3]!=0)
-			{
-				// Project vertex to pixel coordinates by dividing by the w coordinate.
+			// Dimensions of our bounding box
+			int xEnd = 0, yEnd = 0, xStart = width, yStart = height;
+			for(int i = 0; i < 3; i++) {
 				int vx = (int)(positions[i][0]/positions[i][3]);
 				int vy = (int)(positions[i][1]/positions[i][3]);
-							
-				if(vx>=0 && vx<width && vy>=0 && vy<height)
-				{
-					// Draw the pixel using the vertex color.
-					// colorBuffer.setRGB(vx, vy, ((int)(255.f*colors[i][0]) << 16) | ((int)(255.f*colors[i][1]) << 8) | ((int)(255.f*colors[i][2])));
-					
-					// Draw vertices in white for better visibility
-					colorBuffer.setRGB(vx, vy, ((int)(255) << 16) | ((int)(255) << 8) | ((int)(255)));
-				}
+				// find the smallest bounding box based off vertices of triangle
+				if(vx > xEnd) 
+					xEnd = vx;
+				if(vy > yEnd)
+					yEnd = vy;
+				if(xStart > vx)
+					xStart = vx;
+				if(yStart > vy)
+					yStart = vy;
 			}
+			
+			// PerPixel evaluation 
+			yEnd =  Math.min(yEnd, height);
+			yStart =  Math.max(yStart, 0);
+			xEnd =  Math.min(xEnd, width);
+			xStart =  Math.max(xStart, 0);
+			rasterize(xStart, yStart, xEnd, yEnd, coef, coef2, colors);
+		}
+		//bounding box is entire image
+		else 
+		{
+			rasterize(0, 0, width, height, coef, coef2, colors);
 		}
 	}
 	

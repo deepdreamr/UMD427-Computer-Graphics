@@ -14,7 +14,8 @@ public class TransformGroup implements SceneNode {
 
 	public Matrix4f transformation;
 	public Collection<SceneNode> children;
-	
+
+	public String name;
 	public TransformGroup()
 	{
 		transformation = new Matrix4f();

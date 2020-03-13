@@ -19,7 +19,7 @@ public class SimpleSceneManager implements SceneManagerInterface {
 		shapes = new LinkedList<Shape>();
 		lights = new LinkedList<Light>();
 		camera = new Camera();
-		frustum = new Frustum();
+		frustum = new Frustum(camera);
 	}
 	
 	public Camera getCamera()

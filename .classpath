@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="src" path="jopenvr/src"/>
+	<classpathentry kind="src" path="jrtr/src/main/java"/>
+	<classpathentry kind="src" path="simple/src/main/java"/>
+	<classpathentry kind="src" path="simpleVR/src"/>
+	<classpathentry kind="output" path="jopenvr/target/classes"/>
+</classpath>
